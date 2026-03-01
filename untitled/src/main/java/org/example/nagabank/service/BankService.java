@@ -1,22 +1,74 @@
 package org.example.nagabank.service;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import org.example.nagabank.model.CustomerData;
 
+import java.io.*;
+import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * NAGA-BANK Service - Where the Nagas guard your gold! 🐍💰
- * Core banking operations with HashMap-based storage
+ * Core banking operations with HashMap-based storage + JSON persistence
  */
 public class BankService {
+    private static final String DATA_FILE = "nagabank_data.json";
     private final Map<String, CustomerData> customerDataMap;
     private double bankTotalBalance;
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     public BankService() {
         this.customerDataMap = new HashMap<>();
         this.bankTotalBalance = 100000.0; // Bank starts with 100k gold for loans
+        loadData();
+        System.out.println("🐍 Loaded " + customerDataMap.size() + " customers from persistence");
+    }
+    
+    /**
+     * Load data from JSON file
+     */
+    private void loadData() {
+        File file = new File(DATA_FILE);
+        if (!file.exists()) {
+            return;
+        }
+        
+        try (Reader reader = new FileReader(file)) {
+            Type type = new TypeToken<BankData>(){}.getType();
+            BankData data = gson.fromJson(reader, type);
+            if (data != null && data.customers != null) {
+                customerDataMap.putAll(data.customers);
+                bankTotalBalance = data.bankTotalBalance;
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Error loading data: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Save data to JSON file
+     */
+    private void saveData() {
+        try (Writer writer = new FileWriter(DATA_FILE)) {
+            BankData data = new BankData();
+            data.customers = new HashMap<>(customerDataMap);
+            data.bankTotalBalance = bankTotalBalance;
+            gson.toJson(data, writer);
+        } catch (Exception e) {
+            System.err.println("⚠️ Error saving data: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Data container for JSON serialization
+     */
+    private static class BankData {
+        Map<String, CustomerData> customers;
+        double bankTotalBalance;
     }
 
     /**
@@ -35,6 +87,7 @@ public class BankService {
         }
 
         data.setBalance(data.getBalance() - amount);
+        saveData();
         return String.format("Withdrawal successful! Withdrew %.2f gold. New balance: %.2f gold", 
                 amount, data.getBalance());
     }
@@ -49,6 +102,7 @@ public class BankService {
 
         CustomerData data = getOrCreateCustomerData(customerId);
         data.setBalance(data.getBalance() + amount);
+        saveData();
         
         return String.format("Deposit successful! Deposited %.2f gold. New balance: %.2f gold", 
                 amount, data.getBalance());
@@ -75,6 +129,7 @@ public class BankService {
         data.setBalance(data.getBalance() + amount);
         // Decrease bank's reserves
         bankTotalBalance -= amount;
+        saveData();
 
         return String.format("Loan approved! %.2f gold added to your account. Total debt: %.2f gold. The Nagasss will remember...", 
                 amount, data.getLoanAmount());
@@ -107,6 +162,7 @@ public class BankService {
         data.setLoanAmount(data.getLoanAmount() - actualPayment);
         // Return to bank reserves
         bankTotalBalance += actualPayment;
+        saveData();
 
         if (data.getLoanAmount() == 0) {
             return String.format("Loan fully repaid! Paid %.2f gold. You are free from debt! The Nagasss blesss you!", 
@@ -139,6 +195,7 @@ public class BankService {
         data.setLoanAmount(data.getLoanAmount() - payment);
         // Return to bank reserves
         bankTotalBalance += payment;
+        saveData();
 
         if (data.getLoanAmount() == 0) {
             return String.format("You have sacrificed ALL your gold (%.2f) to pay your debt! You are free but poor... The Nagasss respect your dedication!", 
@@ -176,6 +233,7 @@ public class BankService {
             return "Error: Amount must be positive!";
         }
         bankTotalBalance += amount;
+        saveData();
         return String.format("Bank reserves increased by %.2f gold! New bank balance: %.2f gold", 
                 amount, bankTotalBalance);
     }
@@ -191,6 +249,7 @@ public class BankService {
             return String.format("Cannot decrease! Insufficient bank reserves: %.2f gold", bankTotalBalance);
         }
         bankTotalBalance -= amount;
+        saveData();
         return String.format("Bank reserves decreased by %.2f gold. New bank balance: %.2f gold", 
                 amount, bankTotalBalance);
     }
